@@ -6,7 +6,6 @@
 #include "net.h"
 
 #include "driver/dummy.h"
-
 #include "test.h"
 
 static volatile sig_atomic_t terminate;
