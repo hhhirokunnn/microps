@@ -3,21 +3,11 @@ APPS =
 DRIVERS = driver/dummy.o \
 
 OBJS = util.o \
-<<<<<<< HEAD
        net.o \
 
 TESTS = test/step0.exe \
         test/step1.exe \
-<<<<<<< HEAD
         test/step2.exe \
-=======
-=======
-	   net.o \
-
-TESTS = test/step0.exe \
-		test/step1.exe \
->>>>>>> d959d62 (step1)
->>>>>>> 4b20ef0 (step1)
 
 CFLAGS := $(CFLAGS) -g -W -Wall -Wno-unused-parameter -iquote .
 
