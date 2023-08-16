@@ -35,13 +35,13 @@ loopback_transmit(struct net_device *dev, uint16_t type, const uint8_t *data, si
     mutex_lock(&PRIV(dev)->mutex);
     if (PRIV(dev)->queue.num >= LOOPBACK_QUEUE_LIMIT) {
         mutex_unlock(&PRIV(dev)->mutex);
-        errorf("memory alloc err");
+        errorf("queue is full");
         return -1;
     }
     entry = memory_alloc(sizeof(*entry) + len);
     if (!entry) {
         mutex_unlock(&PRIV(dev)->mutex);
-        errorf("queue is full");
+        errorf("memory_alloc() failure");
         return -1;
     }
     entry->type = type;
@@ -50,7 +50,7 @@ loopback_transmit(struct net_device *dev, uint16_t type, const uint8_t *data, si
     queue_push(&PRIV(dev)->queue, entry);
     num = PRIV(dev)->queue.num;
     mutex_unlock(&PRIV(dev)->mutex);
-    debugf("que pushed (num:%u) dev=%s tpy=0x%04x len=%zd", num, dev->name, type,len);
+    debugf("queue pushed (num:%u), dev=%s, type=0x%04x, len=%zu", num, dev->name, type, len);
     debugdump(data, len);
     intr_raise_irq(PRIV(dev)->irq);
     return 0;
@@ -64,14 +64,14 @@ loopback_isr(unsigned int irq, void *id)
 
     dev = (struct net_device *)id;
     mutex_lock(&PRIV(dev)->mutex);
-    while(1) {
+    while (1) {
         entry = queue_pop(&PRIV(dev)->queue);
         if (!entry) {
             break;
         }
-        debugf("que poped num:%u dev=%s type =0x%04x, len=%zd", PRIV(dev)->queue.num, dev->name, entry->type, entry->len);
+        debugf("queue popped (num:%u), dev=%s, type=0x%04x, len=%zu", PRIV(dev)->queue.num, dev->name, entry->type, entry->len);
         debugdump(entry->data, entry->len);
-        net_input_handler(entry->type,entry->data,entry->len,dev);
+        net_input_handler(entry->type, entry->data, entry->len, dev);
         memory_free(entry);
     }
     mutex_unlock(&PRIV(dev)->mutex);
@@ -97,25 +97,22 @@ loopback_init(void)
     dev->mtu = LOOPBACK_MTU;
     dev->hlen = 0; /* non header */
     dev->alen = 0; /* non address */
-    dev->ops = &loopback_ops;
     dev->flags = NET_DEVICE_FLAG_LOOPBACK;
-
+    dev->ops = &loopback_ops;
     lo = memory_alloc(sizeof(*lo));
     if (!lo) {
-        errorf("memor alloc error");
+        errorf("memory_alloc() failure");
         return NULL;
     }
     lo->irq = LOOPBACK_IRQ;
     mutex_init(&lo->mutex);
     queue_init(&lo->queue);
     dev->priv = lo;
-
     if (net_device_register(dev) == -1) {
         errorf("net_device_register() failure");
         return NULL;
     }
-    intr_request_irq(LOOPBACK_IRQ, loopback_isr, INTR_IRQ_SHARED, dev->name, dev);
-    
-    debugf("init, dev %s", dev->name);
+    intr_request_irq(lo->irq, loopback_isr, INTR_IRQ_SHARED, dev->name, dev);
+    debugf("initialized, dev=%s", dev->name);
     return dev;
 }
