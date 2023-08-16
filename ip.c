@@ -166,6 +166,26 @@ ip_iface_select(ip_addr_t addr)
 int
 ip_protocol_register(uint8_t type, void (*handler)(const uint8_t *data, size_t len, ip_addr_t src, ip_addr_t dst, struct ip_iface *iface))
 {
+    struct ip_protocol *entry;
+    for(entry=protocols; entry; entry=entry->next) {
+        if(entry->type == type) {
+            errorf("duplicated type");
+            return -1;
+        }
+    }
+    
+    struct ip_protocol *prot;
+    prot = memory_alloc(sizeof(*prot));
+    if (!prot) {
+        errorf("memory alloc err");
+        return -1;
+    }
+    prot->type=type;
+    prot->handler=handler;
+    prot->next=protocols;
+    protocols=prot;
+    infof("reg, type=%u",prot->type);
+    return 0;
 }
 
 static void
@@ -221,6 +241,14 @@ ip_input(const uint8_t *data, size_t len, struct net_device *dev)
     debugf("dev=%s, iface=%s, protocol=%u, total=%u",
         dev->name, ip_addr_ntop(iface->unicast, addr, sizeof(addr)), hdr->protocol, total);
     ip_dump(data, total);
+    struct ip_protocol *entry;
+    for (entry=protocols; entry; entry=entry->next) {
+        if (hdr->protocol == entry->type) {
+            entry->handler(hdr->options, len - hlen, hdr->src, hdr->dst, iface);
+            return;
+        }
+    }
+    return;
 }
 
 static int
