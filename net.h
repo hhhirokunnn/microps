@@ -3,16 +3,10 @@
 
 #include <stddef.h>
 #include <stdint.h>
-<<<<<<< HEAD
-=======
-#include <sys/time.h>
->>>>>>> d959d62 (step1)
-
 #ifndef IFNAMSIZ
 #define IFNAMSIZ 16
 #endif
 
-<<<<<<< HEAD
 #define NET_DEVICE_TYPE_DUMMY     0x0000
 #define NET_DEVICE_TYPE_LOOPBACK  0x0001
 #define NET_DEVICE_TYPE_ETHERNET  0x0002
@@ -23,10 +17,6 @@
 #define NET_DEVICE_FLAG_P2P       0x0040
 #define NET_DEVICE_FLAG_NEED_ARP  0x0100
 
-=======
-#define NET_DEVICE_TYPE_DUMMY      0x0000
-#define NET_DEVICE_FLAG_UP        0x0001
->>>>>>> d959d62 (step1)
 #define NET_DEVICE_ADDR_LEN 16
 
 #define NET_DEVICE_IS_UP(x) ((x)->flags & NET_DEVICE_FLAG_UP)
@@ -39,13 +29,8 @@ struct net_device {
     uint16_t type;
     uint16_t mtu;
     uint16_t flags;
-<<<<<<< HEAD
     uint16_t hlen; /* header length */
     uint16_t alen; /* address length */
-=======
-    uint16_t hlen;
-    uint16_t alen;
->>>>>>> d959d62 (step1)
     uint8_t addr[NET_DEVICE_ADDR_LEN];
     union {
         uint8_t peer[NET_DEVICE_ADDR_LEN];
@@ -61,7 +46,6 @@ struct net_device_ops {
     int (*transmit)(struct net_device *dev, uint16_t type, const uint8_t *data, size_t len, const void *dst);
 };
 
-<<<<<<< HEAD
 extern struct net_device *
 net_device_alloc(void);
 extern int
@@ -79,13 +63,4 @@ net_shutdown(void);
 extern int
 net_init(void);
 
-=======
-extern struct net_device *net_device_alloc(void);
-extern int net_device_register(struct net_device *dev);
-extern int net_device_output(struct net_device *dev, uint16_t proto_type, const uint8_t *data, size_t len, const void *dst);
-extern int net_input_handler(uint16_t type, const uint8_t *data, size_t len, struct net_device *dev);
-extern int net_run(void);
-extern void net_shutdown(void);
-extern int net_init(void);
->>>>>>> d959d62 (step1)
 #endif
