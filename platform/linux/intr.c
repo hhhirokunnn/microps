@@ -33,23 +33,14 @@ intr_request_irq(unsigned int irq, int (*handler)(unsigned int irq, void *dev), 
     for (entry = irqs; entry; entry = entry->next) {
         if (entry->irq == irq) {
             if (entry->flags ^ INTR_IRQ_SHARED || flags ^ INTR_IRQ_SHARED) {
-<<<<<<< HEAD
                 errorf("conflicts with already registered IRQs");
-=======
-                errorf("conflicts with registered irqs");
->>>>>>> ae2c01c (step2)
                 return -1;
             }
         }
     }
     entry = memory_alloc(sizeof(*entry));
-<<<<<<< HEAD
     if (!entry) {
         errorf("memory_alloc() failure");
-=======
-    if(!entry) {
-        errorf("memmory alloc error");
->>>>>>> ae2c01c (step2)
         return -1;
     }
     entry->irq = irq;
@@ -60,12 +51,7 @@ intr_request_irq(unsigned int irq, int (*handler)(unsigned int irq, void *dev), 
     entry->next = irqs;
     irqs = entry;
     sigaddset(&sigmask, irq);
-<<<<<<< HEAD
     debugf("registered: irq=%u, name=%s", irq, name);
-=======
-    debugf("regsitered: irq=%u, name %s", irq, name);
-
->>>>>>> ae2c01c (step2)
     return 0;
 }
 
