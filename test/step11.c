@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <signal.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #include "util.h"
@@ -63,7 +65,7 @@ int
 main(int argc, char *argv[])
 {
     ip_addr_t src, dst;
-    uint16_t id, seq=0;
+    uint16_t id, seq = 0;
     size_t offset = IP_HDR_SIZE_MIN + ICMP_HDR_SIZE;
 
     if (setup() == -1) {
