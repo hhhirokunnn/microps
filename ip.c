@@ -98,17 +98,63 @@ ip_dump(const uint8_t *data, size_t len)
 struct ip_iface *
 ip_iface_alloc(const char *unicast, const char *netmask)
 {
+    struct ip_iface *iface;
+    iface =memory_alloc(sizeof(*iface));
+    if (!iface) {
+        errorf("memory alloc error");
+        return NULL;
+    }
+    NET_IFACE(iface)->family = NET_IFACE_FAMILY_IP;
+
+    if (ip_addr_pton(unicast, &iface->unicast) == -1) {
+        errorf("unicast str to binary error");
+        memory_free(iface);
+        return NULL;
+    }
+    
+    if (ip_addr_pton(netmask, &iface->netmask) == -1) {
+        errorf("netmask str to binary error");
+        memory_free(iface);
+        return NULL;
+    }
+    iface->broadcast = (iface->unicast & iface->netmask) | ~(iface->netmask);
+
+    return iface;
 }
 
 /* NOTE: must not be call after net_run() */
 int
 ip_iface_register(struct net_device *dev, struct ip_iface *iface)
 {
+    char addr1[IP_ADDR_STR_LEN];
+    char addr2[IP_ADDR_STR_LEN];
+    char addr3[IP_ADDR_STR_LEN];
+
+    if (net_device_add_iface(dev, NET_IFACE(iface)) == -1) {
+        errorf("net device add error");
+        return -1;
+    }
+    iface->next = ifaces;
+    ifaces = iface;
+
+    infof("regeistered dev=%s unicast=%s netmask %s broad %s", dev->name,
+    ip_addr_ntop(iface->unicast, addr1, sizeof(addr1)),
+    ip_addr_ntop(iface->netmask, addr2, sizeof(addr2)),
+    ip_addr_ntop(iface->broadcast, addr3, sizeof(addr3)));
+    return 0;
 }
 
 struct ip_iface *
 ip_iface_select(ip_addr_t addr)
 {
+    struct ip_iface *entry;
+
+    for (entry=ifaces; entry; entry=entry->next) {
+        if (entry->unicast == addr) {
+            return entry;
+        }
+    }
+    return NULL;
 }
 
 static void
@@ -117,6 +163,8 @@ ip_input(const uint8_t *data, size_t len, struct net_device *dev)
     struct ip_hdr *hdr;
     uint8_t v;
     uint16_t hlen, total, offset;
+    struct ip_iface *iface;
+    char addr[IP_ADDR_STR_LEN];
 
     if (len < IP_HDR_SIZE_MIN) {
         errorf("too short");
@@ -138,6 +186,7 @@ ip_input(const uint8_t *data, size_t len, struct net_device *dev)
         errorf("total length error: len=%zu < total=%u", len, total);
         return;
     }
+    // TODO: why it does not compare sender checksum and receiver checksum?
     if (cksum16((uint16_t *)hdr, hlen, 0) != 0) {
         errorf("checksum error: sum=0x%04x, verify=0x%04x", ntoh16(hdr->sum), ntoh16(cksum16((uint16_t *)hdr, hlen, -hdr->sum)));
         return;
@@ -147,7 +196,19 @@ ip_input(const uint8_t *data, size_t len, struct net_device *dev)
         errorf("fragments does not support");
         return;
     }
-    debugf("dev=%s, protocol=%u, total=%u", dev->name, hdr->protocol, total);
+    iface = (struct ip_iface *)net_device_get_iface(dev, NET_IFACE_FAMILY_IP);
+    if (!iface) {
+        errorf("dev has no iface");
+        return;
+    }
+    if (hdr->dst != iface->unicast &&
+        hdr->dst != IP_ADDR_BROADCAST &&
+        hdr->dst != iface->broadcast) {
+            errorf("invalid dst addr");
+            return;
+    }
+
+    debugf("dev=%s, iface=%s protocol=%u, total=%u", dev->name, ip_addr_ntop(iface->unicast, addr, sizeof(addr)), hdr->protocol, total);
     ip_dump(data, total);
 }
 
