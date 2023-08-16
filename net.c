@@ -259,7 +259,7 @@ net_init(void)
         return -1;
     }
     if (icmp_init() == -1) {
-        errorf("err");
+        errorf("icmp_init() failure");
         return -1;
     }
     infof("initialized");
