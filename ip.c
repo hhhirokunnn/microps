@@ -3,6 +3,8 @@
 #include <stddef.h>
 #include <stdlib.h>
 
+#include "platform.h"
+
 #include "util.h"
 #include "net.h"
 #include "ip.h"
@@ -23,6 +25,9 @@ struct ip_hdr {
 
 const ip_addr_t IP_ADDR_ANY       = 0x00000000; /* 0.0.0.0 */
 const ip_addr_t IP_ADDR_BROADCAST = 0xffffffff; /* 255.255.255.255 */
+
+/* NOTE: if you want to add/delete the entries after net_run(), you need to protect these lists with a mutex. */
+static struct ip_iface *ifaces;
 
 int
 ip_addr_pton(const char *p, ip_addr_t *n)
@@ -72,22 +77,38 @@ ip_dump(const uint8_t *data, size_t len)
     v = (hdr->vhl & 0xf0) >> 4;
     hl = hdr->vhl & 0x0f;
     hlen = hl << 2;
-    fprintf(stderr, "  vhl: 0x%02x v %u hl %u (%u)\n",hdr->vhl,v,hl,hlen);
-    fprintf(stderr, "  tos: 0x%02x\n", hdr->tos);
+    fprintf(stderr, "        vhl: 0x%02x [v: %u, hl: %u (%u)]\n", hdr->vhl, v, hl, hlen);
+    fprintf(stderr, "        tos: 0x%02x\n", hdr->tos);
     total = ntoh16(hdr->total);
-    fprintf(stderr, "  total: %u payload %u\n", total, total - hlen);
-    fprintf(stderr,"  id: %u\n", ntoh16(hdr->id));
+    fprintf(stderr, "      total: %u (payload: %u)\n", total, total - hlen);
+    fprintf(stderr, "         id: %u\n", ntoh16(hdr->id));
     offset = ntoh16(hdr->offset);
-    fprintf(stderr, "  ofset: 0x%04x flags=%x offset=%u\n", offset, (offset & 0xe000) >> 13, offset & 0x1fff);
-    fprintf(stderr, "  ttl %u\n", hdr->ttl);
-    fprintf(stderr, "  protocol: %u\n", hdr->protocol);
-    fprintf(stderr, "  sum: 0x%04x\n", ntoh16(hdr->sum));
-    fprintf(stderr, "  src: %s\n", ip_addr_ntop(hdr->src, addr, sizeof(addr)));
-    fprintf(stderr, "  dst: %s\n", ip_addr_ntop(hdr->dst, addr, sizeof(addr)));
+    fprintf(stderr, "     offset: 0x%04x [flags=%x, offset=%u]\n", offset, (offset & 0xe000) >> 13, offset & 0x1fff);
+    fprintf(stderr, "        ttl: %u\n", hdr->ttl);
+    fprintf(stderr, "   protocol: %u\n", hdr->protocol);
+    fprintf(stderr, "        sum: 0x%04x\n", ntoh16(hdr->sum));
+    fprintf(stderr, "        src: %s\n", ip_addr_ntop(hdr->src, addr, sizeof(addr)));
+    fprintf(stderr, "        dst: %s\n", ip_addr_ntop(hdr->dst, addr, sizeof(addr)));
 #ifdef HEXDUMP
     hexdump(stderr, data, len);
 #endif
     funlockfile(stderr);
+}
+
+struct ip_iface *
+ip_iface_alloc(const char *unicast, const char *netmask)
+{
+}
+
+/* NOTE: must not be call after net_run() */
+int
+ip_iface_register(struct net_device *dev, struct ip_iface *iface)
+{
+}
+
+struct ip_iface *
+ip_iface_select(ip_addr_t addr)
+{
 }
 
 static void
@@ -102,36 +123,31 @@ ip_input(const uint8_t *data, size_t len, struct net_device *dev)
         return;
     }
     hdr = (struct ip_hdr *)data;
-    
-    v = (hdr->vhl & 0xf0) >> 4;
+    v = hdr->vhl >> 4;
     if (v != IP_VERSION_IPV4) {
-        errorf("version unmatch");
+        errorf("ip version error: v=%u", v);
         return;
     }
-
     hlen = (hdr->vhl & 0x0f) << 2;
-    if (hlen > len) {
-        errorf("input data short");
+    if (len < hlen) {
+        errorf("header length error: len=%zu < hlen=%u", len, hlen);
         return;
     }
-
-
     total = ntoh16(hdr->total);
-    if (total > len) {
-        errorf("total short");
+    if (len < total) {
+        errorf("total length error: len=%zu < total=%u", len, total);
         return;
     }
-
-    if (cksum16((uint16_t *)data, len, 0) == ntoh16(hdr->sum)) {
-        errorf("checksum err");
+    if (cksum16((uint16_t *)hdr, hlen, 0) != 0) {
+        errorf("checksum error: sum=0x%04x, verify=0x%04x", ntoh16(hdr->sum), ntoh16(cksum16((uint16_t *)hdr, hlen, -hdr->sum)));
         return;
     }
     offset = ntoh16(hdr->offset);
     if (offset & 0x2000 || offset & 0x1fff) {
-        errorf("fragments does not suport");
+        errorf("fragments does not support");
         return;
     }
-    debugf("dev=%s, prot=%u, total=%u", dev->name, hdr->protocol, total);
+    debugf("dev=%s, protocol=%u, total=%u", dev->name, hdr->protocol, total);
     ip_dump(data, total);
 }
 
