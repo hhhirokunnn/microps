@@ -65,14 +65,14 @@ main(int argc, char *argv[])
     size_t offset = IP_HDR_SIZE_MIN;
 
     if (setup() == -1) {
-        errorf("setup error");
+        errorf("setup() failure");
         return -1;
     }
     ip_addr_pton(LOOPBACK_IP_ADDR, &src);
     dst = src;
     while (!terminate) {
         if (ip_output(1, test_data + offset, sizeof(test_data) - offset, src, dst) == -1) {
-            errorf("ip output() failure");
+            errorf("ip_output() failure");
             break;
         }
         sleep(1);
