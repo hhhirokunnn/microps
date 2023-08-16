@@ -2,6 +2,8 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdlib.h>
+#include <sys/types.h>
+#include <string.h>
 
 #include "platform.h"
 
@@ -99,26 +101,24 @@ struct ip_iface *
 ip_iface_alloc(const char *unicast, const char *netmask)
 {
     struct ip_iface *iface;
-    iface =memory_alloc(sizeof(*iface));
+
+    iface = memory_alloc(sizeof(*iface));
     if (!iface) {
-        errorf("memory alloc error");
+        errorf("memory_alloc() failure");
         return NULL;
     }
     NET_IFACE(iface)->family = NET_IFACE_FAMILY_IP;
-
     if (ip_addr_pton(unicast, &iface->unicast) == -1) {
-        errorf("unicast str to binary error");
+        errorf("ip_addr_pton() failure, addr=%s", unicast);
         memory_free(iface);
         return NULL;
     }
-    
     if (ip_addr_pton(netmask, &iface->netmask) == -1) {
-        errorf("netmask str to binary error");
+        errorf("ip_addr_pton() failure, addr=%s", netmask);
         memory_free(iface);
         return NULL;
     }
-    iface->broadcast = (iface->unicast & iface->netmask) | ~(iface->netmask);
-
+    iface->broadcast = (iface->unicast & iface->netmask) | ~iface->netmask;
     return iface;
 }
 
@@ -131,16 +131,15 @@ ip_iface_register(struct net_device *dev, struct ip_iface *iface)
     char addr3[IP_ADDR_STR_LEN];
 
     if (net_device_add_iface(dev, NET_IFACE(iface)) == -1) {
-        errorf("net device add error");
+        errorf("net_device_add_iface() failure");
         return -1;
     }
     iface->next = ifaces;
     ifaces = iface;
-
-    infof("regeistered dev=%s unicast=%s netmask %s broad %s", dev->name,
-    ip_addr_ntop(iface->unicast, addr1, sizeof(addr1)),
-    ip_addr_ntop(iface->netmask, addr2, sizeof(addr2)),
-    ip_addr_ntop(iface->broadcast, addr3, sizeof(addr3)));
+    infof("registered: dev=%s, unicast=%s, netmask=%s, broadcast=%s", dev->name,
+        ip_addr_ntop(iface->unicast, addr1, sizeof(addr1)),
+        ip_addr_ntop(iface->netmask, addr2, sizeof(addr2)),
+        ip_addr_ntop(iface->broadcast, addr3, sizeof(addr3)));
     return 0;
 }
 
@@ -148,13 +147,12 @@ struct ip_iface *
 ip_iface_select(ip_addr_t addr)
 {
     struct ip_iface *entry;
-
-    for (entry=ifaces; entry; entry=entry->next) {
+    for (entry = ifaces; entry; entry = entry->next) {
         if (entry->unicast == addr) {
-            return entry;
+            break;
         }
     }
-    return NULL;
+    return entry;
 }
 
 static void
@@ -198,18 +196,46 @@ ip_input(const uint8_t *data, size_t len, struct net_device *dev)
     }
     iface = (struct ip_iface *)net_device_get_iface(dev, NET_IFACE_FAMILY_IP);
     if (!iface) {
-        errorf("dev has no iface");
+        /* iface is not registered to the device */
         return;
     }
-    if (hdr->dst != iface->unicast &&
-        hdr->dst != IP_ADDR_BROADCAST &&
-        hdr->dst != iface->broadcast) {
-            errorf("invalid dst addr");
+    if (hdr->dst != iface->unicast) {
+        if (hdr->dst != iface->broadcast && hdr->dst != IP_ADDR_BROADCAST) {
+            /* for other host */
             return;
+        }
     }
-
-    debugf("dev=%s, iface=%s protocol=%u, total=%u", dev->name, ip_addr_ntop(iface->unicast, addr, sizeof(addr)), hdr->protocol, total);
+    debugf("dev=%s, iface=%s, protocol=%u, total=%u",
+        dev->name, ip_addr_ntop(iface->unicast, addr, sizeof(addr)), hdr->protocol, total);
     ip_dump(data, total);
+}
+
+static int
+ip_output_device(struct ip_iface *iface, const uint8_t *data, size_t len, ip_addr_t dst)
+{
+}
+
+static ssize_t
+ip_output_core(struct ip_iface *iface, uint8_t protocol, const uint8_t *data, size_t len, ip_addr_t src, ip_addr_t dst, uint16_t id, uint16_t offset)
+{
+}
+
+static uint16_t
+ip_generate_id(void)
+{
+    static mutex_t mutex = MUTEX_INITIALIZER;
+    static uint16_t id = 128;
+    uint16_t ret;
+
+    mutex_lock(&mutex);
+    ret = id++;
+    mutex_unlock(&mutex);
+    return ret;
+}
+
+ssize_t
+ip_output(uint8_t protocol, const uint8_t *data, size_t len, ip_addr_t src, ip_addr_t dst)
+{
 }
 
 int

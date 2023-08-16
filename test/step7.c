@@ -37,11 +37,11 @@ main(int argc, char *argv[])
     }
     iface = ip_iface_alloc(LOOPBACK_IP_ADDR, LOOPBACK_NETMASK);
     if (!iface) {
-        errorf("iface alloc error");
+        errorf("ip_iface_alloc() failure");
         return -1;
     }
     if (ip_iface_register(dev, iface) == -1) {
-        errorf("iface register error");
+        errorf("ip_iface_register() failure");
         return -1;
     }
     if (net_run() == -1) {
