@@ -180,13 +180,15 @@ net_timer_register(struct timeval interval, void (*handler)(void))
 
     timer = memory_alloc(sizeof(*timer));
     if (!timer) {
-        errorf("alloc error");
+        errorf("memory_alloc() failure");
         return -1;
     }
+    timer->interval = interval;
     gettimeofday(&timer->last, NULL);
-    timer->next=timers;
-    timers=timer;
-    infof("reg interval {%d, %d}", interval.tv_sec, interval.tv_usec);
+    timer->handler = handler;
+    timer->next = timers;
+    timers = timer;
+    infof("registered: interval={%d, %d}", interval.tv_sec, interval.tv_usec);
     return 0;
 }
 
@@ -196,11 +198,12 @@ net_timer_handler(void)
     struct net_timer *timer;
     struct timeval now, diff;
 
-    for (timer = timers; timer; timer=timer->next){
-        gettimeofday(&now,NULL);
-        if (timercmp(&timer->interval, &diff, <) != 0) {
+    for (timer = timers; timer; timer = timer->next) {
+        gettimeofday(&now, NULL);
+        timersub(&now, &timer->last, &diff);
+        if (timercmp(&timer->interval, &diff, <) != 0) { /* true (!0) or false (0) */
             timer->handler();
-            gettimeofday(&timer->last, NULL);
+            timer->last = now;
         }
     }
     return 0;
