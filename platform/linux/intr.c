@@ -67,6 +67,17 @@ intr_raise_irq(unsigned int irq)
 static int
 intr_timer_setup(struct itimerspec *interval)
 {
+    timer_t id;
+
+    if(timer_create(CLOCK_REALTIME, NULL, &id) == -1) {
+        errorf("timer create %s", strerror(errno));
+        return -1;
+    }
+    if (timer_settime(id, 0, interval, NULL) == -1) {
+        errorf("timer settime %s", strerror(errno));
+        return -1;
+    }
+    return 0;
 }
 
 static void *

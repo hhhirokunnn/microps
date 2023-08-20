@@ -176,11 +176,34 @@ net_protocol_register(uint16_t type, void (*handler)(const uint8_t *data, size_t
 int
 net_timer_register(struct timeval interval, void (*handler)(void))
 {
+    struct net_timer *timer;
+
+    timer = memory_alloc(sizeof(*timer));
+    if (!timer) {
+        errorf("alloc error");
+        return -1;
+    }
+    gettimeofday(&timer->last, NULL);
+    timer->next=timers;
+    timers=timer;
+    infof("reg interval {%d, %d}", interval.tv_sec, interval.tv_usec);
+    return 0;
 }
 
 int
 net_timer_handler(void)
 {
+    struct net_timer *timer;
+    struct timeval now, diff;
+
+    for (timer = timers; timer; timer=timer->next){
+        gettimeofday(&now,NULL);
+        if (timercmp(&timer->interval, &diff, <) != 0) {
+            timer->handler();
+            gettimeofday(&timer->last, NULL);
+        }
+    }
+    return 0;
 }
 
 int
