@@ -41,12 +41,12 @@ ether_tap_addr(struct net_device *dev)
 
     soc = socket(AF_INET, SOCK_DGRAM, 0);
     if (soc == -1) {
-        errorf("soc %s dev=%s", strerror(errno), dev->name);
+        errorf("socket: %s, dev=%s", strerror(errno), dev->name);
         return -1;
     }
     strncpy(ifr.ifr_name, PRIV(dev)->name, sizeof(ifr.ifr_name)-1);
-    if(ioctl(soc, SIOCGIFHWADDR, &ifr) == -1) {
-        errorf("ioctl sockgifhwaddr %s, dev %s", strerror(errno), dev->name);
+    if (ioctl(soc, SIOCGIFHWADDR, &ifr) == -1) {
+        errorf("ioctl(SIOCGIFHWADDR): %s, dev=%s", strerror(errno), dev->name);
         close(soc);
         return -1;
     }
@@ -64,34 +64,37 @@ ether_tap_open(struct net_device *dev)
     tap = PRIV(dev);
     tap->fd = open(CLONE_DEVICE, O_RDWR);
     if (tap->fd == -1) {
-        errorf("open %s dev %s", strerror(errno), dev->name);
+        errorf("open: %s, dev=%s", strerror(errno), dev->name);
         return -1;
     }
     strncpy(ifr.ifr_name, tap->name, sizeof(ifr.ifr_name)-1);
     ifr.ifr_flags = IFF_TAP | IFF_NO_PI;
     if (ioctl(tap->fd, TUNSETIFF, &ifr) == -1) {
-        errorf("ioctl [tunsetif]: %s, dev=%s", strerror(errno),dev->name);
+        errorf("ioctl(TUNSETIFF): %s, dev=%s", strerror(errno), dev->name);
         close(tap->fd);
         return -1;
     }
-    if(fcntl(tap->fd,F_SETOWN, getpid()) == -1) {
-        errorf("fcntl festfl %s dev %s", strerror(errno), dev->name);
+    /* Set Asynchronous I/O signal delivery destination */
+    if (fcntl(tap->fd, F_SETOWN, getpid()) == -1) {
+        errorf("fcntl(F_SETOWN): %s, dev=%s", strerror(errno), dev->name);
         close(tap->fd);
         return -1;
     }
-    if(fcntl(tap->fd,F_SETFL, O_ASYNC) == -1) {
-        errorf("fcntl fsetfn %s dev %s", strerror(errno), dev->name);
+    /* Enable Asynchronous I/O */
+    if (fcntl(tap->fd, F_SETFL, O_ASYNC) == -1) {
+        errorf("fcntl(F_SETFL): %s, dev=%s", strerror(errno), dev->name);
         close(tap->fd);
         return -1;
     }
-    if(fcntl(tap->fd,F_SETSIG, tap->irq) == -1) {
-        errorf("fcntl fsetsig %s dev %s", strerror(errno), dev->name);
+    /* Use other signal instead of SIGIO */
+    if (fcntl(tap->fd, F_SETSIG, tap->irq) == -1) {
+        errorf("fcntl(F_SETSIG): %s, dev=%s", strerror(errno), dev->name);
         close(tap->fd);
         return -1;
     }
-    if(memcmp(dev->addr,ETHER_ADDR_ANY,ETHER_ADDR_LEN) == 0) {
-        if(ether_tap_addr(dev) == -1) {
-            errorf("error, dev=%s", dev->name);
+    if (memcmp(dev->addr, ETHER_ADDR_ANY, ETHER_ADDR_LEN) == 0) {
+        if (ether_tap_addr(dev) == -1) {
+            errorf("ether_tap_addr() failure, dev=%s", dev->name);
             close(tap->fd);
             return -1;
         }
@@ -102,8 +105,7 @@ ether_tap_open(struct net_device *dev)
 static int
 ether_tap_close(struct net_device *dev)
 {
-    close(PRIV(dev)->fd);
-    return 0;
+    return close(PRIV(dev)->fd);
 }
 
 static ssize_t
@@ -124,9 +126,9 @@ ether_tap_read(struct net_device *dev, uint8_t *buf, size_t size)
     ssize_t len;
 
     len = read(PRIV(dev)->fd, buf, size);
-    if(len <= 0) {
-        if(len == -1 && errno != EINTR) {
-            errorf("read %s, dev %s ", strerror(errno), dev->name);
+    if (len <= 0) {
+        if (len == -1 && errno != EINTR) {
+            errorf("read: %s, dev=%s", strerror(errno), dev->name);
         }
         return -1;
     }
@@ -136,23 +138,24 @@ ether_tap_read(struct net_device *dev, uint8_t *buf, size_t size)
 static int
 ether_tap_isr(unsigned int irq, void *id)
 {
-    struct net_device *dev;
+    struct net_device *dev;;
     struct pollfd pfd;
     int ret;
 
-    dev=(struct net_device *)id;
-    pfd.fd =PRIV(dev)->fd;
-    pfd.events=POLLIN;
-    while(1) {
-        ret = poll(&pfd,1,0);
-        if(ret == -1) {
-            if(errno == EINTR) {
+    dev = (struct net_device *)id;
+    pfd.fd = PRIV(dev)->fd;
+    pfd.events = POLLIN;
+    while (1) {
+        ret = poll(&pfd, 1, 0);
+        if (ret == -1) {
+            if (errno == EINTR) {
                 continue;
             }
-            errorf("poo %s, dev=%s", strerror(errno), dev->name);
+            errorf("poll: %s, dev=%s", strerror(errno), dev->name);
             return -1;
         }
-        if(ret==0){
+        if (ret == 0) {
+            /* No frames to input immediately. */
             break;
         }
         ether_input_helper(dev, ether_tap_read);
@@ -172,34 +175,34 @@ ether_tap_init(const char *name, const char *addr)
     struct net_device *dev;
     struct ether_tap *tap;
 
-    dev=net_device_alloc();
-    if(!dev) {
-        errorf("alloc error");
+    dev = net_device_alloc();
+    if (!dev) {
+        errorf("net_device_alloc() failure");
         return NULL;
     }
     ether_setup_helper(dev);
     if (addr) {
-        if(ether_addr_pton(addr, dev->addr) == -1) {
-            errorf("invalid add , add %s", addr);
+        if (ether_addr_pton(addr, dev->addr) == -1) {
+            errorf("invalid address, addr=%s", addr);
             return NULL;
         }
     }
     dev->ops = &ether_tap_ops;
     tap = memory_alloc(sizeof(*tap));
-    if (!tap){
-        errorf("alloc err");
+    if (!tap) {
+        errorf("memory_alloc() failure");
         return NULL;
     }
     strncpy(tap->name, name, sizeof(tap->name)-1);
-    tap->fd=-1;
-    tap->irq=ETHER_TAP_IRQ;
-    dev->priv=tap;
-    if (net_device_register(dev)==-1) {
-        errorf("net device reg errror");
+    tap->fd = -1;
+    tap->irq = ETHER_TAP_IRQ;
+    dev->priv = tap;
+    if (net_device_register(dev) == -1) {
+        errorf("net_device_register() failure");
         memory_free(tap);
         return NULL;
     }
-    intr_request_irq(tap->irq,ether_tap_isr, INTR_IRQ_SHARED, dev->name,dev);
-    infof("ehter device init dev=%s",dev->name);
+    intr_request_irq(tap->irq, ether_tap_isr, INTR_IRQ_SHARED, dev->name, dev);
+    infof("ethernet device initialized, dev=%s", dev->name);
     return dev;
 }
