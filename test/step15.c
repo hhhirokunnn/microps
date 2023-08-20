@@ -1,5 +1,8 @@
 #include <stdio.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <signal.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #include "util.h"
@@ -89,7 +92,7 @@ main(int argc, char *argv[])
     id = getpid() % UINT16_MAX;
     while (!terminate) {
         if (icmp_output(ICMP_TYPE_ECHO, 0, hton32(id << 16 | ++seq), test_data + offset, sizeof(test_data) - offset, src, dst) == -1) {
-            errorf("icmp out err");
+            errorf("icmp_output() failure");
             break;
         }
         sleep(1);

@@ -20,6 +20,7 @@
 #define ARP_OP_REPLY   2
 
 #define ARP_CACHE_SIZE 32
+#define ARP_CACHE_TIMEOUT 30 /* seconds */
 
 #define ARP_CACHE_STATE_FREE       0
 #define ARP_CACHE_STATE_INCOMPLETE 1
@@ -187,14 +188,14 @@ arp_request(struct net_iface *iface, ip_addr_t tpa)
     request.hdr.pro = hton16(ARP_PRO_IP);
     request.hdr.hln = ETHER_ADDR_LEN;
     request.hdr.pln = IP_ADDR_LEN;
-    request.hdr.op = hton16(ARP_OP_REPLY);
+    request.hdr.op = hton16(ARP_OP_REQUEST);
     memcpy(request.sha, iface->dev->addr, ETHER_ADDR_LEN);
     memcpy(request.spa, &((struct ip_iface *)iface)->unicast, IP_ADDR_LEN);
-    memcpy(request.tha, ETHER_ADDR_ANY, ETHER_ADDR_LEN);
+    memset(request.tha, 0, ETHER_ADDR_LEN);
     memcpy(request.tpa, &tpa, IP_ADDR_LEN);
-    debugf("dev %s len %zu", iface->dev->name, sizeof(request));
+    debugf("dev=%s, len=%zu", iface->dev->name, sizeof(request));
     arp_dump((uint8_t *)&request, sizeof(request));
-    return net_device_output(iface->dev, NET_PROTOCOL_TYPE_ARP, (uint8_t *)&request, sizeof(request), iface->dev->broadcast);
+    return net_device_output(iface->dev, ETHER_TYPE_ARP, (uint8_t *)&request, sizeof(request), iface->dev->broadcast);
 }
 
 static int
@@ -282,11 +283,11 @@ arp_resolve(struct net_iface *iface, ip_addr_t pa, uint8_t *ha)
         cache = arp_cache_alloc();
         if (!cache) {
             mutex_unlock(&mutex);
+            errorf("arp_cache_alloc() failure");
             return ARP_RESOLVE_ERROR;
         }
         cache->state = ARP_CACHE_STATE_INCOMPLETE;
         cache->pa = pa;
-        // memcpy(cache->ha, ha, ETHER_ADDR_LEN);
         gettimeofday(&cache->timestamp, NULL);
         mutex_unlock(&mutex);
         arp_request(iface, pa);
@@ -294,7 +295,7 @@ arp_resolve(struct net_iface *iface, ip_addr_t pa, uint8_t *ha)
     }
     if (cache->state == ARP_CACHE_STATE_INCOMPLETE) {
         mutex_unlock(&mutex);
-        arp_request(iface, pa);
+        arp_request(iface, pa); /* just in case packet loss */
         return ARP_RESOLVE_INCOMPLETE;
     }
     memcpy(ha, cache->ha, ETHER_ADDR_LEN);
@@ -302,6 +303,11 @@ arp_resolve(struct net_iface *iface, ip_addr_t pa, uint8_t *ha)
     debugf("resolved, pa=%s, ha=%s",
         ip_addr_ntop(pa, addr1, sizeof(addr1)), ether_addr_ntop(ha, addr2, sizeof(addr2)));
     return ARP_RESOLVE_FOUND;
+}
+
+static void
+arp_timer_handler(void)
+{
 }
 
 int
