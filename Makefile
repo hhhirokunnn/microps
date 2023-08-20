@@ -6,6 +6,7 @@ DRIVERS = driver/dummy.o \
 OBJS = util.o \
        net.o \
        ether.o \
+       arp.o \
        ip.o \
        icmp.o \
        ether.o \

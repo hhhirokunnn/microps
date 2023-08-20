@@ -245,6 +245,7 @@ net_shutdown(void)
     debugf("shutting down");
 }
 
+#include "arp.h"
 #include "ip.h"
 #include "icmp.h"
 
