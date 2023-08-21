@@ -63,8 +63,8 @@ setup(void)
         errorf("ip_iface_register() failure");
         return -1;
     }
-    if(ip_route_set_default_gateway(iface, DEFAULT_GATEWAY) == -1) {
-        errorf("ip reoute set");
+    if (ip_route_set_default_gateway(iface, DEFAULT_GATEWAY) == -1) {
+        errorf("ip_route_set_default_gateway() failure");
         return -1;
     }
     if (net_run() == -1) {
