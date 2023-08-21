@@ -5,9 +5,17 @@
 #include <string.h>
 #include <sys/types.h>
 
+#include "platform.h"
+
 #include "util.h"
 #include "ip.h"
 #include "udp.h"
+
+#define UDP_PCB_SIZE 16
+
+#define UDP_PCB_STATE_FREE    0
+#define UDP_PCB_STATE_OPEN    1
+#define UDP_PCB_STATE_CLOSING 2
 
 struct pseudo_hdr {
     uint32_t src;
@@ -24,6 +32,21 @@ struct udp_hdr {
     uint16_t sum;
 };
 
+struct udp_pcb {
+    int state;
+    struct ip_endpoint local;
+    struct queue_head queue; /* receive queue */
+};
+
+struct udp_queue_entry {
+    struct ip_endpoint foreign;
+    uint16_t len;
+    uint8_t data[];
+};
+
+static mutex_t mutex = MUTEX_INITIALIZER;
+static struct udp_pcb pcbs[UDP_PCB_SIZE];
+
 static void
 udp_dump(const uint8_t *data, size_t len)
 {
@@ -31,20 +54,51 @@ udp_dump(const uint8_t *data, size_t len)
 
     flockfile(stderr);
     hdr = (struct udp_hdr *)data;
-    fprintf(stderr, "  src %u\n", ntoh16(hdr->src));
-    fprintf(stderr, "  dst %u\n", ntoh16(hdr->dst));
-    fprintf(stderr, "  len %u\n", ntoh16(hdr->len));
-    fprintf(stderr, "  sum 0x%04x\n", ntoh16(hdr->sum));
+    fprintf(stderr, "        src: %u\n", ntoh16(hdr->src));
+    fprintf(stderr, "        dst: %u\n", ntoh16(hdr->dst));
+    fprintf(stderr, "        len: %u\n", ntoh16(hdr->len));
+    fprintf(stderr, "        sum: 0x%04x\n", ntoh16(hdr->sum));
 #ifdef HEXDUMP
     hexdump(stderr, data, len);
 #endif
     funlockfile(stderr);
 }
 
+/*
+ * UDP Protocol Control Block (PCB)
+ *
+ * NOTE: UDP PCB functions must be called after mutex locked
+ */
+
+static struct udp_pcb *
+udp_pcb_alloc(void)
+{
+}
+
+static void
+udp_pcb_release(struct udp_pcb *pcb)
+{
+}
+
+static struct udp_pcb *
+udp_pcb_select(ip_addr_t addr, uint16_t port)
+{
+}
+
+static struct udp_pcb *
+udp_pcb_get(int id)
+{
+}
+
+static int
+udp_pcb_id(struct udp_pcb *pcb)
+{
+}
+
 static void
 udp_input(const uint8_t *data, size_t len, ip_addr_t src, ip_addr_t dst, struct ip_iface *iface)
 {
-        struct pseudo_hdr pseudo;
+    struct pseudo_hdr pseudo;
     uint16_t psum = 0;
     struct udp_hdr *hdr;
     char addr1[IP_ADDR_STR_LEN];
@@ -87,7 +141,7 @@ udp_output(struct ip_endpoint *src, struct ip_endpoint *dst, const  uint8_t *dat
     char ep2[IP_ENDPOINT_STR_LEN];
 
     if (len > IP_PAYLOAD_SIZE_MAX - sizeof(*hdr)) {
-        errorf("long");
+        errorf("too long");
         return -1;
     }
     hdr = (struct udp_hdr *)buf;
@@ -104,10 +158,13 @@ udp_output(struct ip_endpoint *src, struct ip_endpoint *dst, const  uint8_t *dat
     pseudo.len = hton16(total);
     psum = ~cksum16((uint16_t *)&pseudo, sizeof(pseudo), 0);
     hdr->sum = cksum16((uint16_t *)hdr, total, psum);
-    debugf("%s %s len %zu pay %zu",
+    debugf("%s => %s, len=%zu (payload=%zu)",
         ip_endpoint_ntop(src, ep1, sizeof(ep1)), ip_endpoint_ntop(dst, ep2, sizeof(ep2)), total, len);
     udp_dump((uint8_t *)hdr, total);
-    ip_output(IP_PROTOCOL_UDP, buf, total, src->addr, dst->addr);
+    if (ip_output(IP_PROTOCOL_UDP, (uint8_t *)hdr, total, src->addr, dst->addr) == -1) {
+        errorf("ip_output() failure");
+        return -1;
+    }
     return len;
 }
 
@@ -119,4 +176,23 @@ udp_init(void)
         return -1;
     }
     return 0;
+}
+
+/*
+ * UDP User Commands
+ */
+
+int
+udp_open(void)
+{
+}
+
+int
+udp_close(int id)
+{
+}
+
+int
+udp_bind(int id, struct ip_endpoint *local)
+{
 }
