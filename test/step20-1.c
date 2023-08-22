@@ -108,16 +108,16 @@ main(int argc, char *argv[])
     debugf("waiting for data...");
     while (!terminate) {
         ret = udp_recvfrom(soc, buf, sizeof(buf), &foreign);
-        if (ret == -1 ){
-            errorf("recv");
+        if (ret == -1) {
+            errorf("udp_recvfrom() failure");
             break;
         }
         debugf("%zd bytes data form %s", ret, ip_endpoint_ntop(&foreign, ep, sizeof(ep)));
         hexdump(stderr, buf, ret);
         if (udp_sendto(soc, buf, ret, &foreign) == -1) {
-            errorf("sendto");
+            errorf("udp_sendto() failure");
             break;
-        } 
+        }
     }
     udp_close(soc);
     cleanup();

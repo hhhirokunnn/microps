@@ -1,10 +1,10 @@
 #include <stdio.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <string.h>
 #include <signal.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <string.h>
 
 #include "util.h"
 #include "net.h"
@@ -24,7 +24,7 @@ on_signal(int s)
 {
     (void)s;
     terminate = 1;
-    close(0);
+    close(0); /* close STDIN */
 }
 
 static int
@@ -101,13 +101,13 @@ main(int argc, char *argv[])
     }
     ip_endpoint_pton("192.0.2.1:10007", &foreign);
     while (!terminate) {
-        if (!fgets((char *)buf, sizeof(buf), stdin)){
+        if (!fgets((char *)buf, sizeof(buf), stdin)) {
             break;
         }
         if (udp_sendto(soc, buf, strlen((char *)buf), &foreign) == -1) {
-            errorf("sendto");
+            errorf("sock_sendto() failure");
             break;
-        } 
+        }
     }
     udp_close(soc);
     cleanup();
