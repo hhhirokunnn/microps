@@ -84,7 +84,6 @@ cleanup(void)
     net_shutdown();
 }
 
-// sudo setcap cap_net_admin+eip ./test/step22.exe
 int
 main(int argc, char *argv[])
 {

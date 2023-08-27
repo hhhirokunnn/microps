@@ -337,6 +337,7 @@ net_shutdown(void)
 #include "ip.h"
 #include "icmp.h"
 #include "udp.h"
+#include "tcp.h"
 
 int
 net_init(void)
