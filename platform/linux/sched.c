@@ -9,7 +9,7 @@ sched_ctx_init(struct sched_ctx *ctx)
 {
     pthread_cond_init(&ctx->cond, NULL);
     ctx->interrupted = 0;
-    ctx->wc=0;
+    ctx->wc = 0;
     return 0;
 }
 
@@ -24,7 +24,7 @@ sched_sleep(struct sched_ctx *ctx, mutex_t *mutex, const struct timespec *abstim
 {
     int ret;
 
-    if(ctx->interrupted) {
+    if (ctx->interrupted) {
         errno = EINTR;
         return -1;
     }

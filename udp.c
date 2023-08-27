@@ -253,6 +253,16 @@ udp_output(struct ip_endpoint *src, struct ip_endpoint *dst, const  uint8_t *dat
 static void
 event_handler(void *arg)
 {
+    struct udp_pcb *pcb;
+
+    (void)arg;
+    mutex_lock(&mutex);
+    for (pcb = pcbs; pcb < tailof(pcbs); pcb++) {
+        if (pcb->state == UDP_PCB_STATE_OPEN) {
+            sched_interrupt(&pcb->ctx);
+        }
+    }
+    mutex_unlock(&mutex);
 }
 
 int
@@ -262,6 +272,7 @@ udp_init(void)
         errorf("ip_protocol_register() failure");
         return -1;
     }
+    net_event_subscribe(event_handler, NULL);
     return 0;
 }
 
@@ -398,6 +409,7 @@ udp_recvfrom(int id, uint8_t *buf, size_t size, struct ip_endpoint *foreign)
         if (entry) {
             break;
         }
+        /* Wait to be woken up by sched_wakeup() or shced_interrupt() */
         err = sched_sleep(&pcb->ctx, &mutex, NULL);
         if (err) {
             debugf("interrupted");
