@@ -107,6 +107,7 @@ main(int argc, char *argv[])
         if (ret <= 0) {
             break;
         }
+        debugf("%zd bytes data received", ret);
         hexdump(stderr, buf, ret);
         tcp_send(soc, buf, ret);
     }
