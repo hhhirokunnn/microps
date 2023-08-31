@@ -8,7 +8,6 @@
 
 #include "util.h"
 #include "net.h"
-#include "arp.h"
 
 struct net_protocol {
     struct net_protocol *next;
