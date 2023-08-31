@@ -300,21 +300,27 @@ tcp_segment_arrives(struct tcp_segment_info *seg, uint8_t flags, uint8_t *data, 
          */
         if (TCP_FLG_ISSET(flags, TCP_FLG_ACK)) {
             tcp_output_segment(seg->ack, 0, TCP_FLG_RST, 0, NULL, 0, local, foreign);
+            return;
         }
         /*
          * 3rd check for an SYN
         */
         if (TCP_FLG_ISSET(flags, TCP_FLG_SYN)) {
+            /* ignore: security/compartment check */
+            /* ignore: precedence check */
             pcb->local = *local;
             pcb->foreign = *foreign;
             pcb->rcv.wnd = sizeof(pcb->buf);
-            pcb->rcv.nxt=seg->seq + 1;
+            pcb->rcv.nxt = seg->seq + 1;
             pcb->irs = seg->seq;
-            pcb->iss=random();
+            pcb->iss = random();
             tcp_output(pcb, TCP_FLG_SYN | TCP_FLG_ACK, NULL, 0);
-            pcb->snd.nxt=pcb->iss + 1;
+            pcb->snd.nxt = pcb->iss + 1;
             pcb->snd.una = pcb->iss;
             pcb->state = TCP_PCB_STATE_SYN_RECEIVED;
+            /* ignore: Note that any other incoming control or data             */
+            /* (combined with SYN) will be processed in the SYN-RECEIVED state, */
+            /* but processing of SYN and ACK  should not be repeated            */
             return;
         }
         /*
@@ -371,15 +377,16 @@ tcp_segment_arrives(struct tcp_segment_info *seg, uint8_t flags, uint8_t *data, 
      * 5th check the ACK field
      */
     if (!TCP_FLG_ISSET(flags, TCP_FLG_ACK)) {
+        /* drop segment */
         return;
     }
     switch (pcb->state) {
     case TCP_PCB_STATE_SYN_RECEIVED:
-        if(pcb->snd.una <= seg->ack && seg->ack <= pcb->snd.nxt) {
+        if (pcb->snd.una <= seg->ack && seg->ack <= pcb->snd.nxt) {
             pcb->state = TCP_PCB_STATE_ESTABLISHED;
             sched_wakeup(&pcb->ctx);
         } else {
-            tcp_output_segment(seg->ack,0,TCP_FLG_RST,0,NULL,0,local,foreign);
+            tcp_output_segment(seg->ack, 0, TCP_FLG_RST, 0, NULL, 0, local, foreign);
             return;
         }
         break;
@@ -498,32 +505,33 @@ tcp_open_rfc793(struct ip_endpoint *local, struct ip_endpoint *foreign, int acti
     mutex_lock(&mutex);
     pcb = tcp_pcb_alloc();
     if (!pcb) {
-        errorf("alloc");
+        errorf("tcp_pcb_alloc() failure");
         mutex_unlock(&mutex);
         return -1;
     }
-    if(active) {
-        errorf("active opne not");
+    if (active) {
+        errorf("active open does not implement");
         tcp_pcb_release(pcb);
         mutex_unlock(&mutex);
         return -1;
     } else {
-        debugf("pa open local &s waiting con", ip_endpoint_ntop(local, ep1, sizeof(ep1)));
+        debugf("passive open: local=%s, waiting for connection...", ip_endpoint_ntop(local, ep1, sizeof(ep1)));
         pcb->local = *local;
-        if(foreign) {
-            pcb->foreign=*foreign;
+        if (foreign) {
+            pcb->foreign = *foreign;
         }
         pcb->state = TCP_PCB_STATE_LISTEN;
     }
 AGAIN:
     state = pcb->state;
-    while(pcb->state == state) {
-        if(sched_sleep(&pcb->ctx, &mutex, NULL) == -1) {
+    /* waiting for state changed */
+    while (pcb->state == state) {
+        if (sched_sleep(&pcb->ctx, &mutex, NULL) == -1) {
             debugf("interrupted");
-            pcb->state=TCP_PCB_STATE_CLOSED;
+            pcb->state = TCP_PCB_STATE_CLOSED;
             tcp_pcb_release(pcb);
             mutex_unlock(&mutex);
-            errno=EINTR;
+            errno = EINTR;
             return -1;
         }
     }
@@ -531,15 +539,16 @@ AGAIN:
         if (pcb->state == TCP_PCB_STATE_SYN_RECEIVED) {
             goto AGAIN;
         }
-        errorf("open err %d", pcb->state);
+        errorf("open error: %d", pcb->state);
         pcb->state = TCP_PCB_STATE_CLOSED;
         tcp_pcb_release(pcb);
         mutex_unlock(&mutex);
         return -1;
     }
     id = tcp_pcb_id(pcb);
-    debugf("con estb local %s foreign %s", ip_endpoint_ntop(&pcb->local, ep1, sizeof(ep1)), ip_endpoint_ntop(&pcb->foreign, ep2, sizeof(ep2)));
-    mutex_unlock(&mutex);
+    debugf("connection established: local=%s, foreign=%s",
+        ip_endpoint_ntop(&pcb->local, ep1, sizeof(ep1)), ip_endpoint_ntop(&pcb->foreign, ep2, sizeof(ep2)));
+    pthread_mutex_unlock(&mutex);
     return id;
 }
 
@@ -549,9 +558,9 @@ tcp_close(int id)
     struct tcp_pcb *pcb;
 
     mutex_lock(&mutex);
-    pcb=tcp_pcb_get(id);
-    if(!pcb) {
-        errorf("not found");
+    pcb = tcp_pcb_get(id);
+    if (!pcb) {
+        errorf("pcb not found");
         mutex_unlock(&mutex);
         return -1;
     }
@@ -559,4 +568,14 @@ tcp_close(int id)
     tcp_pcb_release(pcb);
     mutex_unlock(&mutex);
     return 0;
+}
+
+ssize_t
+tcp_send(int id, uint8_t *data, size_t len)
+{
+}
+
+ssize_t
+tcp_receive(int id, uint8_t *buf, size_t size)
+{
 }

@@ -90,7 +90,6 @@ main(int argc, char *argv[])
     struct ip_endpoint local;
     int soc;
 
-    signal(SIGINT, on_signal);
     if (setup() == -1) {
         errorf("setup() failure");
         return -1;
@@ -98,7 +97,7 @@ main(int argc, char *argv[])
     ip_endpoint_pton("0.0.0.0:7", &local);
     soc = tcp_open_rfc793(&local, NULL, 0);
     if (soc == -1) {
-        errorf("open");
+        errorf("tcp_open_rfc793() failure");
         return -1;
     }
     while (!terminate) {
