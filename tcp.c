@@ -288,7 +288,7 @@ tcp_retransmit_queue_add(struct tcp_pcb *pcb, uint32_t seq, uint8_t flg, uint8_t
     entry->seq=seq;
     entry->flg=flg;
     entry->len=len;
-    memcpy(entry->data, data,a entry->len);
+    memcpy(entry->data, data, entry->len);
     gettimeofday(&entry->first, NULL);
     entry->last=entry->first;
     if (!queue_push(&pcb->queue, entry)) {
@@ -313,7 +313,7 @@ tcp_retransmit_queue_cleanup(struct tcp_pcb *pcb)
             break;
         }
         entry=queue_pop(&pcb->queue);
-        debugf("rm seq %u flg %s len %u", entry->seq, tcp_flag_ntoa(entry->flg), entry->len);
+        debugf("rm seq %u flg %s len %u", entry->seq, tcp_flg_ntoa(entry->flg), entry->len);
         memory_free(entry);
     }
     return;
@@ -337,7 +337,7 @@ tcp_retransmit_queue_emit(void *arg, void *data)
     }
     timeout = entry->last;
     timeval_add_usec(&timeout, entry->rto);
-    if (timecmp(&now, &timeout, >)) {
+    if (timercmp(&now, &timeout, >)) {
         tcp_output_segment(entry->seq, pcb->rcv.nxt, entry->flg, pcb->rcv.wnd, entry->data, entry->len, &pcb->local, &pcb->foreign);
         entry->last=now;
         entry->rto *= 2;
@@ -424,6 +424,15 @@ tcp_segment_arrives(struct tcp_segment_info *seg, uint8_t flags, uint8_t *data, 
         /*
          * 1st check the ACK bit
          */
+        if (TCP_FLG_ISSET(flags, TCP_FLG_ACK)) {
+            if (seg->ack <= pcb->iss || seg->ack > pcb->snd.nxt) {
+                tcp_output_segment(seg->ack, 0, TCP_FLG_RST, 0, NULL, 0, local, foreign);
+                return;
+            } 
+            if (pcb->snd.una <= seg->ack && seg->ack <= pcb->snd.nxt) {
+                acceptable = 1;
+            }
+        }
 
         /*
          * 2nd check the RST bit
@@ -436,6 +445,27 @@ tcp_segment_arrives(struct tcp_segment_info *seg, uint8_t flags, uint8_t *data, 
         /*
          * 4th check the SYN bit
          */
+        if (TCP_FLG_ISSET(flags, TCP_FLG_SYN)) {
+            pcb->rcv.nxt = seg->seq + 1;
+            pcb->irs = seg->seq;
+            if(acceptable) {
+                pcb->snd.una = seg->ack;
+                tcp_retransmit_queue_cleanup(pcb);
+            }
+            if (pcb->snd.una > pcb->iss) {
+                pcb->state = TCP_PCB_STATE_ESTABLISHED;
+                tcp_output(pcb, TCP_FLG_ACK, NULL, 0);
+                pcb->snd.wnd = seg->wnd;
+                pcb->snd.wl1 = seg->seq;
+                pcb->snd.wl2 = seg->ack;
+                sched_wakeup(&pcb->ctx);
+                return;
+            } else {
+                pcb->state = TCP_PCB_STATE_SYN_RECEIVED;
+                tcp_output(pcb, TCP_FLG_SYN | TCP_FLG_ACK, NULL, 0);
+                return;
+            }
+        }
 
         /*
          * 5th, if neither of the SYN or RST bits is set then drop the segment and return
@@ -660,7 +690,7 @@ tcp_init(void)
         return -1;
     }
     if (net_timer_register(interval, tcp_timer) == -1) {
-        errrof("net timer reg");
+        errorf("net timer reg");
         return -1;
     }
     net_event_subscribe(event_handler, NULL);
@@ -687,10 +717,22 @@ tcp_open_rfc793(struct ip_endpoint *local, struct ip_endpoint *foreign, int acti
         return -1;
     }
     if (active) {
-        errorf("active open does not implement");
-        tcp_pcb_release(pcb);
-        mutex_unlock(&mutex);
-        return -1;
+        debugf("active open local %s foregin %s con..",
+            ip_endpoint_ntop(local, ep1, sizeof(ep1)), ip_endpoint_ntop(foreign, ep2, sizeof(ep2)));
+        pcb->local = *local;
+        pcb->foreign = *foreign;
+        pcb->rcv.wnd = sizeof(pcb->buf);
+        pcb->iss=random();
+        if (tcp_output(pcb, TCP_FLG_SYN, NULL, 0) == -1) {
+            errorf("output");
+            pcb->state=TCP_PCB_STATE_CLOSED;
+            tcp_pcb_release(pcb);
+            mutex_unlock(&mutex);
+            return -1;
+        }
+        pcb->snd.una = pcb->iss;
+        pcb->snd.nxt=pcb->iss + 1;
+        pcb->state = TCP_PCB_STATE_SYN_SENT;
     } else {
         debugf("passive open: local=%s, waiting for connection...", ip_endpoint_ntop(local, ep1, sizeof(ep1)));
         pcb->local = *local;
